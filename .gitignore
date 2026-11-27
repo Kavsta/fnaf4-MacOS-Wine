@@ -1,0 +1,12 @@
+.DS_Store
+build/
+*.dSYM/
+*.xcuserstate
+local-game-files/
+*.exe
+*.dll
+*.msi
+*.pak
+*.ogg
+*.wav
+*.mp3
