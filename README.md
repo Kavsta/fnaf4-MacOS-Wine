@@ -53,7 +53,7 @@ For the optional `FNAF4_AUDIO_ENGINE=openal` mode, provide 32-bit `dsound.dll` a
 
 ## Verification
 
-The helper build succeeded on this Mac. The display scaler was exercised with the standard edition in the existing Wine 10 setup on one Apple Silicon Mac. The full-screen and windowed views used the same scaling modes. The repository launcher has not yet been exercised with a fresh Wine prefix or on every MacBook display size.
+The helper build and standard launcher were exercised on one Apple Silicon Mac with the existing Wine 10 prefix. The launch log confirms that the scaler initialized and the window helper enabled resize and fullscreen controls. A fresh Wine prefix, the Halloween edition through this launcher, and every MacBook display size have not been tested.
 
 ## License and game files
 
