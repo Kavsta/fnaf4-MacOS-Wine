@@ -41,6 +41,8 @@ If your Wine package needs companion macOS libraries, set `FNAF4_WINE_LIBRARY_PA
 
 Double-click one of the launchers in `launchers/` to start the matching edition. You can also run `scripts/launch.zsh standard` or `scripts/launch.zsh halloween` from Terminal.
 
+The repository folder can be moved because its launchers resolve the scripts and helpers relative to the folder. The convenience launchers in Downloads read `FNAF4_COMPATIBILITY_DIR` from `~/Library/Application Support/FNAF4-Wine/config.zsh`. Update that setting if you move the folder and want those shortcuts to keep working.
+
 ## Display modes
 
 Choose **Zoom to Fit (4:3)** from the Display menu or press **⌘⇧1** to show the entire game image while preserving its proportions. Choose **Stretch to Fill** or press **⌘⇧2** to fill the window with the entire image. Neither mode crops the game image.

@@ -3,6 +3,9 @@
 
 export FNAF4_GAME_DIR="$HOME/path/to/your/game-folder"
 export FNAF4_WINE_BIN="/path/to/wine64"
+# Optional. Used by the convenience launchers in Downloads.
+# Update this if you move the repository folder.
+# export FNAF4_COMPATIBILITY_DIR="$HOME/Downloads/fnaf4-wine-compatibility"
 # Optional. Set this only when your Wine package needs extra macOS libraries.
 # export FNAF4_WINE_LIBRARY_PATH="/path/to/Wine/frameworks:/path/to/Wine/lib"
 # Optional. Defaults to ~/Library/Application Support/FNAF4-Wine/prefix
