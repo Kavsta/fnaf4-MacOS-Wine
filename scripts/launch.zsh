@@ -75,6 +75,7 @@ fi
 export WINEPREFIX="$wine_prefix"
 export WINEDEBUG="${FNAF4_WINE_DEBUG:-fixme-all,warn+dsound,warn+coreaudio}"
 export WINEDLLOVERRIDES="$wine_overrides"
+export PATH="${wine_bin:h}:$PATH"
 if [[ -n "${FNAF4_WINE_LIBRARY_PATH:-}" ]]; then
     export DYLD_FALLBACK_LIBRARY_PATH="$FNAF4_WINE_LIBRARY_PATH${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
