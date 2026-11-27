@@ -24,3 +24,18 @@ export FNAF4_AUDIO_BUFFER=short
 # are the defaults because FNAF 3 audio works without the FNAF 4 audio setup.
 # export FNAF3_AUDIO_ENGINE=wine
 # export FNAF3_AUDIO_BUFFER=off
+
+# Optional FNAF 1 settings. The game executable is inside its own subfolder.
+# It uses a separate Wine prefix and defaults to Wine audio.
+# export FNAF1_GAME_DIR="$HOME/Downloads/FNAF1Dump/Five Nights at Freddy's"
+# export FNAF1_WINE_PREFIX="$HOME/Library/Application Support/FNAF4-Wine/fnaf1-prefix"
+# FNAF1_WINE_BIN defaults to FNAF4_WINE_BIN.
+# export FNAF1_AUDIO_ENGINE=wine
+# export FNAF1_AUDIO_BUFFER=off
+
+# Optional Ultimate Custom Night settings.
+# export UCN_GAME_DIR="$HOME/Downloads/UCN"
+# export UCN_WINE_PREFIX="$HOME/Library/Application Support/FNAF4-Wine/ucn-prefix"
+# export UCN_WINDOW_WIDTH=1280
+# export UCN_WINDOW_HEIGHT=720
+# UCN_WINE_D3D_CONFIG may be set to renderer=vulkan to try Wine's Vulkan path.

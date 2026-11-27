@@ -27,9 +27,30 @@ static IMP originalUpdateLayer;
 static IMP originalMouseLocation;
 static os_unfair_lock geometryLock = OS_UNFAIR_LOCK_INIT;
 static MouseGeometry currentGeometry;
-static const CGFloat gameWidth = 1024;
-static const CGFloat gameHeight = 768;
+static CGFloat gameWidth = 1024;
+static CGFloat gameHeight = 768;
+static CGFloat minimumWidth = 1024;
+static CGFloat minimumHeight = 768;
 static char overlayAssociation;
+
+static void readDimension(const char *name, CGFloat *dimension)
+{
+    const char *value = getenv(name);
+    if (!value || !*value) return;
+    char *end = NULL;
+    double parsed = strtod(value, &end);
+    if (end && !*end && parsed > 0 && isfinite(parsed)) *dimension = parsed;
+}
+
+static void readGameDimensions(void)
+{
+    readDimension("FNAF_DISPLAY_WIDTH", &gameWidth);
+    readDimension("FNAF_DISPLAY_HEIGHT", &gameHeight);
+    minimumWidth = gameWidth;
+    minimumHeight = gameHeight;
+    readDimension("FNAF_DISPLAY_MIN_WIDTH", &minimumWidth);
+    readDimension("FNAF_DISPLAY_MIN_HEIGHT", &minimumHeight);
+}
 
 static BOOL stretchOnly(void)
 {
@@ -118,7 +139,8 @@ static const struct {
 
 static BOOL isGameWindow(NSWindow *window)
 {
-    return [window.title hasPrefix:@"Five Nights at Freddy"];
+    return [window.title hasPrefix:@"Five Nights at Freddy"] ||
+           [window.title hasPrefix:@"Ultimate Custom Night"];
 }
 
 static NSView *findFrameView(NSView *view)
@@ -187,6 +209,30 @@ static void updateScaledLayer(NSView *root, SEL selector)
         if (window.keyWindow) saveMouseGeometry((MouseGeometry){0});
         return;
     }
+    NSRect destination = viewportForMode(windowRect, mode);
+    BOOL sourceFillsWindow = fabs(NSMinX(source) - NSMinX(windowRect)) < 0.5 &&
+                             fabs(NSMinY(source) - NSMinY(windowRect)) < 0.5 &&
+                             fabs(NSWidth(source) - NSWidth(windowRect)) < 0.5 &&
+                             fabs(NSHeight(source) - NSHeight(windowRect)) < 0.5;
+    BOOL destinationFillsWindow = fabs(NSMinX(destination) - NSMinX(windowRect)) < 0.5 &&
+                                  fabs(NSMinY(destination) - NSMinY(windowRect)) < 0.5 &&
+                                  fabs(NSWidth(destination) - NSWidth(windowRect)) < 0.5 &&
+                                  fabs(NSHeight(destination) - NSHeight(windowRect)) < 0.5;
+    if (sourceFillsWindow && destinationFillsWindow) {
+        state.background.hidden = YES;
+        if (window.keyWindow) saveMouseGeometry((MouseGeometry){0});
+        BOOL changed = !NSEqualSizes(windowRect.size, state.lastWindowSize) ||
+                       !NSEqualRects(destination, state.lastViewport) || state.lastMode != mode;
+        if (changed) {
+            fprintf(stderr, "FNAF display: native %.0fx%.0f frame; bypassing image copy\n",
+                    NSWidth(source), NSHeight(source));
+            state.lastWindowSize = windowRect.size;
+            state.lastViewport = destination;
+            state.lastMode = mode;
+        }
+        return;
+    }
+
     CGImageRef frame = (__bridge CGImageRef)contents;
     const CGFloat sx = (CGFloat)CGImageGetWidth(frame) / NSWidth(windowRect);
     const CGFloat sy = (CGFloat)CGImageGetHeight(frame) / NSHeight(windowRect);
@@ -200,7 +246,6 @@ static void updateScaledLayer(NSView *root, SEL selector)
         return;
     }
 
-    NSRect destination = viewportForMode(windowRect, mode);
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     state.background.hidden = NO;
@@ -214,7 +259,7 @@ static void updateScaledLayer(NSView *root, SEL selector)
     BOOL changed = !NSEqualSizes(windowRect.size, state.lastWindowSize) ||
                    !NSEqualRects(destination, state.lastViewport) || state.lastMode != mode;
     if (changed) {
-        fprintf(stderr, "FNAF4 display: %s %.0fx%.0f -> %.0fx%.0f (window %.0fx%.0f, fullscreen=%d)\n",
+        fprintf(stderr, "FNAF display: %s %.0fx%.0f -> %.0fx%.0f (window %.0fx%.0f, fullscreen=%d)\n",
                 mode == ScaleStretch ? "Stretch" : "Zoom to fit",
                 NSWidth(source), NSHeight(source), NSWidth(destination), NSHeight(destination),
                 NSWidth(windowRect), NSHeight(windowRect),
@@ -236,7 +281,7 @@ static void updateScaledLayer(NSView *root, SEL selector)
 @implementation ScaleMenu
 - (void)sync
 {
-    self.fit.state = mode == ScaleFit ? NSControlStateValueOn : NSControlStateValueOff;
+    if (self.fit) self.fit.state = mode == ScaleFit ? NSControlStateValueOn : NSControlStateValueOff;
     self.stretch.state = mode == ScaleStretch ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
@@ -264,6 +309,7 @@ static void refreshMenu(ScaleMenu *controller)
 __attribute__((constructor)) static void enableDisplayScaler(void)
 {
     if (!getenv("FNAF4_DISPLAY_SCALER")) return;
+    readGameDimensions();
     dispatch_async(dispatch_get_main_queue(), ^{
         static ScaleMenu *controller;
         static dispatch_source_t timer;
@@ -285,7 +331,11 @@ __attribute__((constructor)) static void enableDisplayScaler(void)
                 controller.display = [[NSMenuItem alloc] initWithTitle:@"Display" action:NULL keyEquivalent:@""];
                 NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Display"];
                 if (!stretchOnly()) {
-                    controller.fit = [[NSMenuItem alloc] initWithTitle:@"Zoom to Fit (4:3)"
+                    NSString *ratio = @"";
+                    CGFloat aspect = gameWidth / gameHeight;
+                    if (fabs(aspect - 4.0 / 3.0) < 0.01) ratio = @" (4:3)";
+                    else if (fabs(aspect - 16.0 / 9.0) < 0.01) ratio = @" (16:9)";
+                    controller.fit = [[NSMenuItem alloc] initWithTitle:[@"Zoom to Fit" stringByAppendingString:ratio]
                                                     action:@selector(selectMode:) keyEquivalent:@"1"];
                     controller.fit.target = controller;
                     controller.fit.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
@@ -305,8 +355,8 @@ __attribute__((constructor)) static void enableDisplayScaler(void)
             for (NSWindow *window in NSApp.windows) {
                 if (!isGameWindow(window)) continue;
                 refreshMenu(controller);
-                if (!NSEqualSizes(window.contentMinSize, NSMakeSize(gameWidth, gameHeight))) {
-                    window.contentMinSize = NSMakeSize(gameWidth, gameHeight);
+                if (!NSEqualSizes(window.contentMinSize, NSMakeSize(minimumWidth, minimumHeight))) {
+                    window.contentMinSize = NSMakeSize(minimumWidth, minimumHeight);
                 }
             }
         });
