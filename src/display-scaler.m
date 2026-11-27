@@ -31,6 +31,11 @@ static const CGFloat gameWidth = 1024;
 static const CGFloat gameHeight = 768;
 static char overlayAssociation;
 
+static BOOL stretchOnly(void)
+{
+    return getenv("FNAF_DISPLAY_STRETCH_ONLY") != NULL;
+}
+
 @interface ScaleOverlay : NSObject
 @property (nonatomic, strong) CALayer *background;
 @property (nonatomic, strong) CALayer *image;
@@ -113,7 +118,7 @@ static const struct {
 
 static BOOL isGameWindow(NSWindow *window)
 {
-    return [window.title hasPrefix:@"Five Nights at Freddy's 4"];
+    return [window.title hasPrefix:@"Five Nights at Freddy"];
 }
 
 static NSView *findFrameView(NSView *view)
@@ -237,7 +242,7 @@ static void updateScaledLayer(NSView *root, SEL selector)
 
 - (void)selectMode:(NSMenuItem *)sender
 {
-    mode = sender == self.fit ? ScaleFit : ScaleStretch;
+    mode = !stretchOnly() && sender == self.fit ? ScaleFit : ScaleStretch;
     [self sync];
     const char *setting = getenv("FNAF4_DISPLAY_PREFS");
     if (setting) {
@@ -270,7 +275,7 @@ __attribute__((constructor)) static void enableDisplayScaler(void)
                 const char *setting = getenv("FNAF4_DISPLAY_PREFS");
                 NSString *preference = setting ? [NSString stringWithContentsOfFile:@(setting)
                                                               encoding:NSUTF8StringEncoding error:NULL] : nil;
-                mode = [preference isEqualToString:@"fit"] ? ScaleFit : ScaleStretch;
+                mode = !stretchOnly() && [preference isEqualToString:@"fit"] ? ScaleFit : ScaleStretch;
                 Method update = class_getInstanceMethod(NSClassFromString(@"WineContentView"), @selector(updateLayer));
                 if (!update) return;
                 originalUpdateLayer = method_setImplementation(update, (IMP)updateScaledLayer);
@@ -279,15 +284,18 @@ __attribute__((constructor)) static void enableDisplayScaler(void)
                 controller = [ScaleMenu new];
                 controller.display = [[NSMenuItem alloc] initWithTitle:@"Display" action:NULL keyEquivalent:@""];
                 NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Display"];
-                controller.fit = [[NSMenuItem alloc] initWithTitle:@"Zoom to Fit (4:3)"
-                                                action:@selector(selectMode:) keyEquivalent:@"1"];
+                if (!stretchOnly()) {
+                    controller.fit = [[NSMenuItem alloc] initWithTitle:@"Zoom to Fit (4:3)"
+                                                    action:@selector(selectMode:) keyEquivalent:@"1"];
+                    controller.fit.target = controller;
+                    controller.fit.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
+                    [menu addItem:controller.fit];
+                }
                 controller.stretch = [[NSMenuItem alloc] initWithTitle:@"Stretch to Fill"
                                                     action:@selector(selectMode:) keyEquivalent:@"2"];
-                for (NSMenuItem *item in @[controller.fit, controller.stretch]) {
-                    item.target = controller;
-                    item.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
-                    [menu addItem:item];
-                }
+                controller.stretch.target = controller;
+                controller.stretch.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagShift;
+                [menu addItem:controller.stretch];
                 controller.display.submenu = menu;
                 [controller sync];
             }

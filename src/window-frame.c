@@ -18,7 +18,7 @@ static BOOL CALLBACK find_game_window(HWND window, LPARAM context)
 {
     WindowSearch *search = (WindowSearch *)context;
     wchar_t title[128];
-    static const wchar_t game_title[] = L"Five Nights at Freddy's 4";
+    static const wchar_t game_title[] = L"Five Nights at Freddy";
     if (!IsWindowVisible(window) || !GetWindowTextW(window, title, ARRAYSIZE(title))) {
         return TRUE;
     }

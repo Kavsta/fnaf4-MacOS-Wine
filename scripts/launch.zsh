@@ -9,23 +9,59 @@ if [[ -f "$config_file" ]]; then
 fi
 
 case "${1:-standard}" in
-    standard) executable='FiveNightsatFreddys4.exe'; edition=standard ;;
-    halloween) executable='FiveNightsatFreddys4 HalloweenEdition.exe'; edition=halloween ;;
-    *) print -u2 'Choose standard or halloween.'; exit 2 ;;
+    standard)
+        executable='FiveNightsatFreddys4.exe'
+        edition=standard
+        game_dir=${FNAF4_GAME_DIR:-}
+        wine_bin=${FNAF4_WINE_BIN:-}
+        wine_prefix=${FNAF4_WINE_PREFIX:-${WINEPREFIX:-"$support_dir/prefix"}}
+        audio_engine=${FNAF4_AUDIO_ENGINE:-wine}
+        audio_buffer=${FNAF4_AUDIO_BUFFER:-short}
+        display_prefs=${FNAF4_DISPLAY_PREFS:-"$support_dir/display-mode"}
+        wine_debug=${FNAF4_WINE_DEBUG:-fixme-all,warn+dsound,warn+coreaudio}
+        ;;
+    halloween)
+        executable='FiveNightsatFreddys4 HalloweenEdition.exe'
+        edition=halloween
+        game_dir=${FNAF4_GAME_DIR:-}
+        wine_bin=${FNAF4_WINE_BIN:-}
+        wine_prefix=${FNAF4_WINE_PREFIX:-${WINEPREFIX:-"$support_dir/prefix"}}
+        audio_engine=${FNAF4_AUDIO_ENGINE:-wine}
+        audio_buffer=${FNAF4_AUDIO_BUFFER:-short}
+        display_prefs=${FNAF4_DISPLAY_PREFS:-"$support_dir/display-mode"}
+        wine_debug=${FNAF4_WINE_DEBUG:-fixme-all,warn+dsound,warn+coreaudio}
+        ;;
+    fnaf3)
+        executable='FiveNightsatFreddys3.exe'
+        edition=fnaf3
+        game_dir=${FNAF3_GAME_DIR:-}
+        wine_bin=${FNAF3_WINE_BIN:-${FNAF4_WINE_BIN:-}}
+        wine_prefix=${FNAF3_WINE_PREFIX:-"$support_dir/fnaf3-prefix"}
+        audio_engine=${FNAF3_AUDIO_ENGINE:-wine}
+        audio_buffer=${FNAF3_AUDIO_BUFFER:-off}
+        display_prefs=${FNAF3_DISPLAY_PREFS:-"$support_dir/fnaf3-display-mode"}
+        wine_debug=${FNAF3_WINE_DEBUG:-${FNAF4_WINE_DEBUG:-fixme-all,warn+dsound,warn+coreaudio}}
+        ;;
+    *)
+        print -u2 'Choose standard, halloween, or fnaf3.'
+        exit 2
+        ;;
 esac
 
-game_dir=${FNAF4_GAME_DIR:-}
 if [[ -z "$game_dir" || ! -d "$game_dir" ]]; then
-    print -u2 "Set FNAF4_GAME_DIR in $config_file to the folder containing your game files."
+    if [[ "$edition" == fnaf3 ]]; then
+        print -u2 "Set FNAF3_GAME_DIR in $config_file to the folder containing FiveNightsatFreddys3.exe."
+    else
+        print -u2 "Set FNAF4_GAME_DIR in $config_file to the folder containing the FNAF 4 game files."
+    fi
     exit 1
 fi
 
-wine_bin=${FNAF4_WINE_BIN:-}
 if [[ -z "$wine_bin" ]]; then
     wine_bin=$(whence -p wine64 || whence -p wine || true)
 fi
 if [[ -z "$wine_bin" || ! -x "$wine_bin" ]]; then
-    print -u2 "Set FNAF4_WINE_BIN in $config_file to your Wine executable."
+    print -u2 "Set FNAF4_WINE_BIN or FNAF3_WINE_BIN in $config_file to your Wine executable."
     exit 1
 fi
 if [[ ! -f "$game_dir/$executable" ]]; then
@@ -33,24 +69,21 @@ if [[ ! -f "$game_dir/$executable" ]]; then
     exit 1
 fi
 
-for helper in display-scaler.dylib audio-buffer.dylib window-frame.exe; do
-    if [[ ! -f "$repo_root/build/$helper" ]]; then
-        print -u2 "Build helpers first with $repo_root/scripts/build.zsh"
-        exit 1
-    fi
-done
+if [[ ! -f "$repo_root/build/display-scaler.dylib" || ! -f "$repo_root/build/window-frame.exe" ]]; then
+    print -u2 "Build the window helpers first with $repo_root/scripts/build.zsh"
+    exit 1
+fi
 
-mkdir -p "$support_dir"
-wine_prefix=${FNAF4_WINE_PREFIX:-${WINEPREFIX:-"$support_dir/prefix"}}
-audio_engine=${FNAF4_AUDIO_ENGINE:-wine}
-audio_buffer=${FNAF4_AUDIO_BUFFER:-short}
-wine_overrides='mscoree,mshtml='
-
+if [[ "$audio_buffer" == short && ! -f "$repo_root/build/audio-buffer.dylib" ]]; then
+    print -u2 "Build the audio helper first with $repo_root/scripts/build.zsh"
+    exit 1
+fi
 case "$audio_buffer" in
     short|off) ;;
-    *) print -u2 'FNAF4_AUDIO_BUFFER must be short or off.'; exit 2 ;;
+    *) print -u2 'The selected audio buffer setting must be short or off.'; exit 2 ;;
 esac
 
+wine_overrides='mscoree,mshtml='
 case "$audio_engine" in
     wine) ;;
     openal)
@@ -64,24 +97,26 @@ case "$audio_engine" in
         fi
         export ALSOFT_LOGLEVEL=${ALSOFT_LOGLEVEL:-1} DSOAL_LOGLEVEL=${DSOAL_LOGLEVEL:-1}
         ;;
-    *) print -u2 'FNAF4_AUDIO_ENGINE must be wine or openal.'; exit 2 ;;
+    *) print -u2 'The selected audio engine must be wine or openal.'; exit 2 ;;
 esac
 
-if [[ ! -x "$repo_root/build/display-scaler.dylib" || ! -x "$repo_root/build/audio-buffer.dylib" ]]; then
-    print -u2 'The macOS helpers are not executable. Rebuild them with scripts/build.zsh.'
-    exit 1
-fi
-
+mkdir -p "$support_dir"
 export WINEPREFIX="$wine_prefix"
-export WINEDEBUG="${FNAF4_WINE_DEBUG:-fixme-all,warn+dsound,warn+coreaudio}"
+export WINEDEBUG="$wine_debug"
 export WINEDLLOVERRIDES="$wine_overrides"
 export PATH="${wine_bin:h}:$PATH"
 if [[ -n "${FNAF4_WINE_LIBRARY_PATH:-}" ]]; then
     export DYLD_FALLBACK_LIBRARY_PATH="$FNAF4_WINE_LIBRARY_PATH${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 export FNAF4_DISPLAY_SCALER=1
-export FNAF4_DISPLAY_PREFS="$support_dir/display-mode"
+export FNAF4_DISPLAY_PREFS="$display_prefs"
 export FNAF4_AUDIO_BUFFER="$audio_buffer"
+if [[ "$edition" == fnaf3 ]]; then
+    export FNAF_DISPLAY_STRETCH_ONLY=1
+else
+    unset FNAF_DISPLAY_STRETCH_ONLY
+fi
+
 insert_libraries="$repo_root/build/display-scaler.dylib"
 if [[ "$audio_buffer" == short ]]; then
     insert_libraries="$repo_root/build/audio-buffer.dylib:$insert_libraries"

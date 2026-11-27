@@ -1,33 +1,33 @@
-# FNAF 4 Wine Compatibility for macOS
+# FNAF 3 & 4 Wine Compatibility for macOS
 
-A small set of macOS and Windows helpers for running an existing Five Nights at Freddy's 4 installation through Wine. The game remains the Windows build. This project does not include game executables, assets, audio, saves, or a Wine runtime.
+Small macOS and Windows helpers for running existing Five Nights at Freddy's 3 and 4 installations through Wine. The games remain their Windows builds. This project does not include game executables, assets, audio, saves, or a Wine runtime.
 
-## What it adds
+## Features
 
-- A movable, resizable Wine window with standard window controls and macOS fullscreen support.
-- Two display modes that scale the full 4:3 game image to the current window. **Zoom to Fit** keeps the original proportions. **Stretch to Fill** fills the window and changes the proportions.
-- A Display menu with **⌘⇧1** and **⌘⇧2** shortcuts. The selection is saved for the next launch.
+- A movable, resizable game window with standard macOS window controls and fullscreen support.
+- FNAF 4 offers **Zoom to Fit (4:3)** and **Stretch to Fill**, from the Display menu or with **⌘⇧1** and **⌘⇧2**. FNAF 3 uses **Stretch to Fill** because its image does not fit the 4:3 mode correctly.
+- FNAF 4's display choice is saved independently from FNAF 3's stretch-only setting.
 - An optional short AudioUnit output buffer for reducing audio stutter.
-- An optional DSOAL/OpenAL path for the game's DirectSound audio.
+- An optional DSOAL/OpenAL audio path for FNAF 4.
 
-The scaler uses the window's current size, including when entering fullscreen or resizing. The game window has a 1024×768 minimum client size because that is the game's original render size.
+The scaler uses the current window size, including in fullscreen. Both game windows remain resizable.
 
 ## Requirements
 
 - macOS with Xcode Command Line Tools.
 - An x86_64 Wine installation that can run 32-bit Windows applications. Apple Silicon runs this Wine build through Rosetta.
-- Your own installed copy of the game. Put both edition executables in one folder, or configure a folder for each edition separately in a future change.
-- Homebrew's MinGW cross-compiler to build the small Windows window helper. Install it with `brew install mingw-w64`.
+- Your own installed copy of FNAF 3 and/or FNAF 4.
+- Homebrew's MinGW cross-compiler to build the small Windows window helper: `brew install mingw-w64`.
 
 ## Build and configure
 
-From the repository folder, build the helpers:
+Build the helpers from the repository folder:
 
 ```sh
 ./scripts/build.zsh
 ```
 
-Copy the example configuration into the per-user settings folder and edit the two required paths:
+Copy the example configuration into the per-user settings folder and edit it:
 
 ```sh
 mkdir -p "$HOME/Library/Application Support/FNAF4-Wine"
@@ -35,28 +35,36 @@ cp config.example.zsh "$HOME/Library/Application Support/FNAF4-Wine/config.zsh"
 open -t "$HOME/Library/Application Support/FNAF4-Wine/config.zsh"
 ```
 
-Set `FNAF4_GAME_DIR` to the folder containing the game executables. Set `FNAF4_WINE_BIN` to the full path to your Wine executable. `FNAF4_WINE_PREFIX` is optional and defaults to a separate prefix under `~/Library/Application Support/FNAF4-Wine/prefix`.
+Set `FNAF4_GAME_DIR` to the folder containing the FNAF 4 executables and `FNAF4_WINE_BIN` to your Wine executable. Set `FNAF3_GAME_DIR` to the folder containing `FiveNightsatFreddys3.exe` to enable FNAF 3. FNAF 3 uses its own Wine prefix at `~/Library/Application Support/FNAF4-Wine/fnaf3-prefix` by default; set `FNAF3_WINE_PREFIX` to choose another one. If no separate `FNAF3_WINE_BIN` is set, FNAF 3 uses `FNAF4_WINE_BIN`.
 
 If your Wine package needs companion macOS libraries, set `FNAF4_WINE_LIBRARY_PATH` to their colon-separated folders. Standard Wine installations may not need this.
 
-Double-click one of the launchers in `launchers/` to start the matching edition. You can also run `scripts/launch.zsh standard` or `scripts/launch.zsh halloween` from Terminal.
+Double-click a matching launcher in `launchers/`, or run one of these from Terminal:
 
-The repository folder can be moved because its launchers resolve the scripts and helpers relative to the folder. The convenience launchers in Downloads read `FNAF4_COMPATIBILITY_DIR` from `~/Library/Application Support/FNAF4-Wine/config.zsh`. Update that setting if you move the folder and want those shortcuts to keep working.
+```sh
+scripts/launch.zsh standard
+scripts/launch.zsh halloween
+scripts/launch.zsh fnaf3
+```
+
+The repository can be moved because its launchers find the helper files relative to the repository folder. Convenience launchers in Downloads use `FNAF4_COMPATIBILITY_DIR` from `~/Library/Application Support/FNAF4-Wine/config.zsh`; update it if you move the repository.
 
 ## Display modes
 
-Choose **Zoom to Fit (4:3)** from the Display menu or press **⌘⇧1** to show the entire game image while preserving its proportions. Choose **Stretch to Fill** or press **⌘⇧2** to fill the window with the entire image. Neither mode crops the game image.
+FNAF 4 can preserve its original proportions with **Zoom to Fit (4:3)** or fill the window with **Stretch to Fill**. FNAF 3 only shows **Stretch to Fill**. FNAF 4's choice is saved separately from FNAF 3's display setting.
 
 ## Audio
 
-The default `FNAF4_AUDIO_BUFFER=short` setting requests a smaller buffer from the selected CoreAudio output device during Wine initialization. CoreAudio applies this at the device level, so other apps using the same output device can also be affected while the smaller buffer is set. The helper does not restore the previous buffer size on exit. Set it to `off` in `config.zsh` to keep the device setting unchanged.
+FNAF 4 defaults to `FNAF4_AUDIO_BUFFER=short`, which requests a smaller CoreAudio buffer while Wine runs. CoreAudio applies this at the selected output device, so other apps using the same device can be affected while the smaller buffer is active. The helper does not restore the previous buffer size on exit. Set the option to `off` to leave the device setting unchanged.
 
-For the optional `FNAF4_AUDIO_ENGINE=openal` mode, provide 32-bit `dsound.dll` and `dsoal-aldrv.dll` beside the game executable. An `alsoft.ini` in the same folder is optional. DSOAL is a separate LGPL-2.1 project and OpenAL Soft has its own license. They are not included here. See the [DSOAL project and releases](https://github.com/kcat/dsoal) and [OpenAL Soft](https://github.com/kcat/openal-soft) for their source, releases, and license notices.
+FNAF 3 defaults to Wine's audio path and leaves the AudioUnit buffer unchanged. Its optional `FNAF3_AUDIO_BUFFER` setting accepts `short` or `off`.
+
+For FNAF 4's optional `FNAF4_AUDIO_ENGINE=openal` mode, provide 32-bit `dsound.dll` and `dsoal-aldrv.dll` beside the game executable. An `alsoft.ini` in the same folder is optional. DSOAL and OpenAL Soft are separate projects with their own license terms and are not included here. See the [DSOAL project](https://github.com/kcat/dsoal) and [OpenAL Soft](https://github.com/kcat/openal-soft).
 
 ## Verification
 
-The standard and Halloween editions have both been confirmed working through the launchers on one Apple Silicon Mac with the existing Wine 10 prefix. The standard launch log confirms that the scaler initialized and the window helper enabled resize and fullscreen controls. A fresh Wine prefix and other MacBook display sizes have not been tested.
+FNAF 4 standard and Halloween editions have been confirmed working through the launchers on one Apple Silicon Mac with Wine 10. FNAF 3 has also booted to gameplay on that Mac. The FNAF 3 frame rate is lower than expected and remains under investigation; its audio played at normal speed during the check. Other Mac models and display sizes have not been tested.
 
 ## License and game files
 
-The helper source in this repository is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE). Optional Wine, DSOAL, and OpenAL components keep their own terms. No game data is included. Use the game files from your own installation.
+The helper source is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE). Optional Wine, DSOAL, and OpenAL components keep their own terms. No game data is included; provide the files from your own installation.
