@@ -271,12 +271,265 @@ static void updateScaledLayer(NSView *root, SEL selector)
     CGImageRelease(image);
 }
 
-@interface ScaleMenu : NSObject
+@interface ScaleMenu : NSObject <NSMenuDelegate>
 @property (nonatomic, strong) NSMenuItem *fit;
 @property (nonatomic, strong) NSMenuItem *stretch;
 @property (nonatomic, strong) NSMenuItem *display;
+@property (nonatomic, strong) NSMenuItem *cheats;
+@property (nonatomic, strong) NSMenuItem *beatAllNights;
+@property (nonatomic, strong) NSMenuItem *cheatNote;
 - (void)selectMode:(NSMenuItem *)sender;
+- (void)toggleBeatAllNights:(NSMenuItem *)sender;
+- (void)refreshCheats;
 @end
+
+static NSString *const CheatStateErrorDomain = @"FNAF4CheatState";
+static NSArray<NSString *> *cheatSaveKeys(void)
+{
+    return @[@"beatgame", @"beat8"];
+}
+
+static NSError *cheatError(NSInteger code, NSString *message)
+{
+    return [NSError errorWithDomain:CheatStateErrorDomain code:code
+                           userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+static NSString *findFNAF4SavePath(NSString **reason)
+{
+    const char *prefixValue = getenv("WINEPREFIX");
+    if (!prefixValue || !*prefixValue) {
+        if (reason) *reason = @"The active Wine prefix could not be found.";
+        return nil;
+    }
+
+    NSString *usersPath = [[@(prefixValue) stringByAppendingPathComponent:@"drive_c"]
+                           stringByAppendingPathComponent:@"users"];
+    NSArray<NSString *> *profiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:usersPath error:NULL];
+    NSMutableArray<NSString *> *matches = [NSMutableArray array];
+    for (NSString *profile in profiles) {
+        NSString *candidate = [[[[[usersPath stringByAppendingPathComponent:profile]
+                                 stringByAppendingPathComponent:@"AppData"]
+                                stringByAppendingPathComponent:@"Roaming"]
+                               stringByAppendingPathComponent:@"MMFApplications"]
+                              stringByAppendingPathComponent:@"fn4"];
+        BOOL isDirectory = NO;
+        if ([[NSFileManager defaultManager] fileExistsAtPath:candidate isDirectory:&isDirectory] && !isDirectory) {
+            [matches addObject:candidate.stringByStandardizingPath];
+        }
+    }
+
+    if (matches.count == 1) return matches.firstObject;
+    if (reason) {
+        *reason = matches.count == 0
+            ? @"No FNAF 4 save was found in this Wine prefix. Start the game once, then reopen Cheats."
+            : @"More than one FNAF 4 save was found. The cheat is disabled to protect the wrong profile.";
+    }
+    return nil;
+}
+
+static NSString *cheatStateFilePath(void)
+{
+    const char *configuredPath = getenv("FNAF4_CHEATS_STATE");
+    if (configuredPath && *configuredPath) return @(configuredPath);
+    NSString *supportPath = [NSHomeDirectory() stringByAppendingPathComponent:
+                             @"Library/Application Support/FNAF4-Wine"];
+    return [supportPath stringByAppendingPathComponent:@"cheats-state.plist"];
+}
+
+static NSMutableDictionary *readCheatStates(NSError **error)
+{
+    NSString *path = cheatStateFilePath();
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return [NSMutableDictionary dictionary];
+    NSData *data = [NSData dataWithContentsOfFile:path options:0 error:error];
+    if (!data) return nil;
+    id propertyList = [NSPropertyListSerialization propertyListWithData:data
+                                                                 options:NSPropertyListMutableContainersAndLeaves
+                                                                  format:NULL error:error];
+    if (![propertyList isKindOfClass:NSDictionary.class]) {
+        if (error) *error = cheatError(1, @"The saved cheat settings are invalid.");
+        return nil;
+    }
+    return [propertyList mutableCopy];
+}
+
+static BOOL writeCheatStates(NSDictionary *states, NSError **error)
+{
+    NSString *path = cheatStateFilePath();
+    NSString *directory = path.stringByDeletingLastPathComponent;
+    if (![[NSFileManager defaultManager] createDirectoryAtPath:directory
+                                   withIntermediateDirectories:YES attributes:nil error:error]) return NO;
+    NSData *data = [NSPropertyListSerialization dataWithPropertyList:states
+                                                              format:NSPropertyListXMLFormat_v1_0
+                                                             options:0 error:error];
+    return data && [data writeToFile:path options:NSDataWritingAtomic error:error];
+}
+
+static BOOL saveSectionRange(NSArray<NSString *> *lines, NSRange *sectionRange)
+{
+    BOOL inFNAF4 = NO;
+    NSUInteger start = NSNotFound;
+    for (NSUInteger index = 0; index < lines.count; index++) {
+        NSString *trimmed = [lines[index] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if ([trimmed hasPrefix:@"["] && [trimmed hasSuffix:@"]"]) {
+            if (inFNAF4) {
+                *sectionRange = NSMakeRange(start, index - start);
+                return YES;
+            }
+            NSString *name = [trimmed substringWithRange:NSMakeRange(1, trimmed.length - 2)];
+            if ([name caseInsensitiveCompare:@"fn4"] == NSOrderedSame) {
+                inFNAF4 = YES;
+                start = index + 1;
+            }
+        }
+    }
+    if (inFNAF4) {
+        *sectionRange = NSMakeRange(start, lines.count - start);
+        return YES;
+    }
+    return NO;
+}
+
+static NSString *saveKeyForLine(NSString *line)
+{
+    NSString *trimmed = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+    NSRange equals = [trimmed rangeOfString:@"="];
+    if (equals.location == NSNotFound) return nil;
+    return [[trimmed substringToIndex:equals.location]
+            stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet].lowercaseString;
+}
+
+static NSMutableArray<NSNumber *> *lineIndexesForKey(NSArray<NSString *> *lines, NSRange section, NSString *key)
+{
+    NSMutableArray<NSNumber *> *indexes = [NSMutableArray array];
+    NSUInteger end = MIN(NSMaxRange(section), lines.count);
+    for (NSUInteger index = section.location; index < end; index++) {
+        if ([saveKeyForLine(lines[index]) isEqualToString:key]) [indexes addObject:@(index)];
+    }
+    return indexes;
+}
+
+static NSUInteger sectionInsertionIndex(NSArray<NSString *> *lines, NSRange section)
+{
+    NSUInteger index = NSMaxRange(section);
+    if (index == lines.count && index > section.location && [lines[index - 1] length] == 0) index--;
+    return index;
+}
+
+static NSDictionary<NSString *, NSArray<NSString *> *> *originalCheatLines(NSArray<NSString *> *lines)
+{
+    NSRange section;
+    if (!saveSectionRange(lines, &section)) return nil;
+    NSMutableDictionary *original = [NSMutableDictionary dictionary];
+    for (NSString *key in cheatSaveKeys()) {
+        NSMutableArray<NSString *> *values = [NSMutableArray array];
+        for (NSNumber *index in lineIndexesForKey(lines, section, key)) [values addObject:lines[index.unsignedIntegerValue]];
+        original[key] = values;
+    }
+    return original;
+}
+
+static BOOL changeCheatLine(NSMutableArray<NSString *> *lines, NSString *key,
+                            NSArray<NSString *> *originalLines, BOOL enable, NSError **error)
+{
+    NSRange section;
+    if (!saveSectionRange(lines, &section)) {
+        if (error) *error = cheatError(2, @"The save file does not contain the expected [fn4] section.");
+        return NO;
+    }
+    NSMutableArray<NSNumber *> *indexes = lineIndexesForKey(lines, section, key);
+    if (enable) {
+        if (indexes.count == 0) {
+            [lines insertObject:[key stringByAppendingString:@"=1"] atIndex:sectionInsertionIndex(lines, section)];
+        } else {
+            for (NSNumber *index in indexes) lines[index.unsignedIntegerValue] = [key stringByAppendingString:@"=1"];
+        }
+        return YES;
+    }
+
+    if (![originalLines isKindOfClass:NSArray.class]) {
+        if (error) *error = cheatError(3, @"The original save values are missing; refusing to change the save.");
+        return NO;
+    }
+    for (NSInteger current = (NSInteger)indexes.count - 1; current >= 0; current--) {
+        NSUInteger lineIndex = indexes[(NSUInteger)current].unsignedIntegerValue;
+        if ((NSUInteger)current < originalLines.count) {
+            lines[lineIndex] = originalLines[(NSUInteger)current];
+        } else {
+            [lines removeObjectAtIndex:lineIndex];
+        }
+    }
+    if (originalLines.count > indexes.count) {
+        NSRange updatedSection;
+        if (!saveSectionRange(lines, &updatedSection)) return NO;
+        NSUInteger insertionIndex = sectionInsertionIndex(lines, updatedSection);
+        for (NSUInteger index = indexes.count; index < originalLines.count; index++) {
+            [lines insertObject:originalLines[index] atIndex:insertionIndex++];
+        }
+    }
+    return YES;
+}
+
+static BOOL writeSaveLines(NSArray<NSString *> *lines, NSString *newline, NSString *path, NSError **error)
+{
+    NSString *contents = [lines componentsJoinedByString:newline];
+    NSData *data = [contents dataUsingEncoding:NSUTF8StringEncoding];
+    if (!data) {
+        if (error) *error = cheatError(4, @"The save file could not be encoded as text.");
+        return NO;
+    }
+    return [data writeToFile:path options:NSDataWritingAtomic error:error];
+}
+
+static BOOL setBeatAllNights(NSString *path, BOOL enable, NSError **error)
+{
+    NSMutableDictionary *states = readCheatStates(error);
+    if (!states) return NO;
+    NSDictionary *entry = [states[path] isKindOfClass:NSDictionary.class] ? states[path] : nil;
+    BOOL currentlyEnabled = [entry[@"enabled"] boolValue];
+    if (enable == currentlyEnabled) return YES;
+
+    NSString *contents = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:error];
+    if (!contents) return NO;
+    NSString *newline = [contents containsString:@"\r\n"] ? @"\r\n"
+        : ([contents containsString:@"\r"] ? @"\r" : @"\n");
+    NSMutableArray<NSString *> *lines = [[contents componentsSeparatedByString:newline] mutableCopy];
+
+    if (enable) {
+        NSDictionary *original = originalCheatLines(lines);
+        if (!original) {
+            if (error) *error = cheatError(2, @"The save file does not contain the expected [fn4] section.");
+            return NO;
+        }
+        states[path] = @{ @"enabled": @YES, @"original": original };
+        if (!writeCheatStates(states, error)) return NO;
+        for (NSString *key in cheatSaveKeys()) {
+            if (!changeCheatLine(lines, key, @[], YES, error)) {
+                [states removeObjectForKey:path];
+                writeCheatStates(states, NULL);
+                return NO;
+            }
+        }
+        if (!writeSaveLines(lines, newline, path, error)) {
+            [states removeObjectForKey:path];
+            writeCheatStates(states, NULL);
+            return NO;
+        }
+        return YES;
+    }
+
+    NSDictionary *original = [entry[@"original"] isKindOfClass:NSDictionary.class] ? entry[@"original"] : nil;
+    if (!original) {
+        if (error) *error = cheatError(3, @"The original save values are missing; refusing to change the save.");
+        return NO;
+    }
+    for (NSString *key in cheatSaveKeys()) {
+        if (!changeCheatLine(lines, key, original[key], NO, error)) return NO;
+    }
+    if (!writeSaveLines(lines, newline, path, error)) return NO;
+    [states removeObjectForKey:path];
+    return writeCheatStates(states, error);
+}
 
 @implementation ScaleMenu
 - (void)sync
@@ -298,12 +551,74 @@ static void updateScaledLayer(NSView *root, SEL selector)
         if (isGameWindow(window)) window.contentView.needsDisplay = YES;
     }
 }
+
+- (void)refreshCheats
+{
+    if (!self.beatAllNights) return;
+    NSString *reason = nil;
+    NSString *savePath = findFNAF4SavePath(&reason);
+    if (!savePath) {
+        self.beatAllNights.enabled = NO;
+        self.beatAllNights.state = NSControlStateValueOff;
+        self.cheatNote.title = reason ?: @"FNAF 4 save unavailable.";
+        return;
+    }
+
+    NSError *error = nil;
+    NSMutableDictionary *states = readCheatStates(&error);
+    if (!states) {
+        self.beatAllNights.enabled = NO;
+        self.beatAllNights.state = NSControlStateValueOff;
+        self.cheatNote.title = [NSString stringWithFormat:@"Cheat status unavailable: %@", error.localizedDescription];
+        return;
+    }
+    NSDictionary *entry = [states[savePath] isKindOfClass:NSDictionary.class] ? states[savePath] : nil;
+    BOOL enabled = [entry[@"enabled"] boolValue];
+    self.beatAllNights.enabled = YES;
+    self.beatAllNights.state = enabled ? NSControlStateValueOn : NSControlStateValueOff;
+    self.cheatNote.title = enabled
+        ? @"Unlocks appear after returning to the title screen."
+        : @"Changes only the all-nights and 20/20 unlock flags.";
+}
+
+- (void)menuNeedsUpdate:(NSMenu *)menu
+{
+    if (menu == self.cheats.submenu) [self refreshCheats];
+}
+
+- (void)toggleBeatAllNights:(NSMenuItem *)sender
+{
+    NSString *reason = nil;
+    NSString *savePath = findFNAF4SavePath(&reason);
+    NSError *error = nil;
+    BOOL succeeded = NO;
+    if (savePath) {
+        NSMutableDictionary *states = readCheatStates(&error);
+        if (states) {
+            NSDictionary *entry = [states[savePath] isKindOfClass:NSDictionary.class] ? states[savePath] : nil;
+            sender.state = [entry[@"enabled"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+            BOOL enable = sender.state != NSControlStateValueOn;
+            succeeded = setBeatAllNights(savePath, enable, &error);
+        }
+    }
+    if (!succeeded) {
+        NSAlert *alert = [NSAlert new];
+        alert.messageText = @"The FNAF 4 cheat could not be changed.";
+        alert.informativeText = error.localizedDescription ?: reason ?: @"The save file could not be found.";
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+    }
+    [self refreshCheats];
+}
 @end
 
 static void refreshMenu(ScaleMenu *controller)
 {
-    if (!NSApp.mainMenu || [NSApp.mainMenu indexOfItem:controller.display] >= 0) return;
-    [NSApp.mainMenu addItem:controller.display];
+    if (!NSApp.mainMenu) return;
+    if ([NSApp.mainMenu indexOfItem:controller.display] < 0) [NSApp.mainMenu addItem:controller.display];
+    if (controller.cheats && [NSApp.mainMenu indexOfItem:controller.cheats] < 0) {
+        [NSApp.mainMenu addItem:controller.cheats];
+    }
 }
 
 __attribute__((constructor)) static void enableDisplayScaler(void)
@@ -348,6 +663,23 @@ __attribute__((constructor)) static void enableDisplayScaler(void)
                 [menu addItem:controller.stretch];
                 controller.display.submenu = menu;
                 [controller sync];
+
+                if (getenv("FNAF4_ENABLE_CHEATS")) {
+                    controller.cheats = [[NSMenuItem alloc] initWithTitle:@"Cheats" action:NULL keyEquivalent:@""];
+                    NSMenu *cheatMenu = [[NSMenu alloc] initWithTitle:@"Cheats"];
+                    cheatMenu.delegate = controller;
+                    controller.beatAllNights = [[NSMenuItem alloc]
+                        initWithTitle:@"Beat All Nights (Unlock Extras)"
+                        action:@selector(toggleBeatAllNights:) keyEquivalent:@""];
+                    controller.beatAllNights.target = controller;
+                    [cheatMenu addItem:controller.beatAllNights];
+                    [cheatMenu addItem:[NSMenuItem separatorItem]];
+                    controller.cheatNote = [[NSMenuItem alloc] initWithTitle:@"" action:NULL keyEquivalent:@""];
+                    controller.cheatNote.enabled = NO;
+                    [cheatMenu addItem:controller.cheatNote];
+                    controller.cheats.submenu = cheatMenu;
+                    [controller refreshCheats];
+                }
             }
 
             NSWindow *key = NSApp.keyWindow;

@@ -177,6 +177,12 @@ if [[ -n "${FNAF4_WINE_LIBRARY_PATH:-}" ]]; then
     export DYLD_FALLBACK_LIBRARY_PATH="$FNAF4_WINE_LIBRARY_PATH${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 fi
 export FNAF4_AUDIO_BUFFER="$audio_buffer"
+if [[ "$edition" == standard || "$edition" == halloween ]]; then
+    export FNAF4_ENABLE_CHEATS=1
+    export FNAF4_CHEATS_STATE="$support_dir/cheats-state.plist"
+else
+    unset FNAF4_ENABLE_CHEATS FNAF4_CHEATS_STATE
+fi
 if [[ "$edition" == fnaf3 ]]; then
     export FNAF_DISPLAY_STRETCH_ONLY=1
 else

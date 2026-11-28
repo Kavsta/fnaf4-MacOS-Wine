@@ -17,6 +17,7 @@ The launchers use a separate Wine prefix for each game by default. The repositor
 
 - Movable, resizable windows with standard macOS controls and fullscreen support.
 - FNAF 4 offers **Zoom to Fit (4:3)** and **Stretch to Fill**, from the Display menu or with **⌘⇧1** and **⌘⇧2**.
+- FNAF 4 adds a reversible **Beat All Nights (Unlock Extras)** toggle in the Cheats menu. It changes only the `beatgame` and `beat8` flags in the active Wine save, and restores their previous values when turned off. Return to the title screen to see the unlocks.
 - FNAF 3 uses **Stretch to Fill** because its game image does not fit the 4:3 mode correctly.
 - FNAF 1 and Ultimate Custom Night use game-specific window sizing.
 - An optional short AudioUnit output buffer and an optional DSOAL/OpenAL audio path for FNAF 4.
