@@ -18,6 +18,7 @@ The launchers use a separate Wine prefix for each game by default. The repositor
 - Movable, resizable windows with standard macOS controls and fullscreen support.
 - FNAF 4 offers **Zoom to Fit (4:3)** and **Stretch to Fill**, from the Display menu or with **⌘⇧1** and **⌘⇧2**.
 - FNAF 4 adds a reversible **Beat All Nights (Unlock Extras)** toggle in the Cheats menu. It sets `beatgame` and the `beat5`–`beat8` completion flags in the active Wine save, and restores their previous values when turned off. Quit and reopen FNAF 4 to load the updated save.
+- FNAF 4 adds a **Controller** menu with left-stick aiming, optional A/Cross-button or second-push entry, and D-pad tap-to-aim/tap-again-to-enter. A/Cross clicks, B/Circle holds the flashlight, and X/Square holds the door shut.
 - FNAF 3 uses **Stretch to Fill** because its game image does not fit the 4:3 mode correctly.
 - FNAF 1 and Ultimate Custom Night use game-specific window sizing.
 - An optional short AudioUnit output buffer and an optional DSOAL/OpenAL audio path for FNAF 4.
@@ -64,6 +65,10 @@ The repository can be moved because its launchers find helper files relative to 
 ## Display modes
 
 FNAF 4 can preserve its original proportions with **Zoom to Fit (4:3)** or fill the window with **Stretch to Fill**. FNAF 3 only shows **Stretch to Fill**. The FNAF 4 display choice is saved separately from FNAF 3's display setting.
+
+## Controller support
+
+Pair a compatible controller with macOS before launching FNAF 4. Select **Controller** in the macOS menu bar to choose **Left Stick: Pan, A / Cross to Enter**, **Left Stick: Push Again to Enter**, or **D-Pad: Tap to Aim, Tap Again to Enter**. Choose **Off** to disable controller input. DualSense and other controllers exposed by Apple's Game Controller framework are supported.
 
 ## Audio
 

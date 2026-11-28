@@ -6,8 +6,9 @@ build_dir="$repo_root/build"
 mkdir -p "$build_dir"
 
 xcrun clang -arch x86_64 -fobjc-arc -dynamiclib -O2 -Wall -Wextra -Werror \
-    -framework AppKit -framework QuartzCore -framework CoreGraphics \
-    "$repo_root/src/display-scaler.m" -o "$build_dir/display-scaler.dylib"
+    -framework AppKit -framework QuartzCore -framework CoreGraphics -framework GameController \
+    "$repo_root/src/display-scaler.m" "$repo_root/src/controller-input.m" \
+    -o "$build_dir/display-scaler.dylib"
 
 xcrun clang -arch x86_64 -dynamiclib -O2 -Wall -Wextra -Werror \
     -framework AudioToolbox -framework CoreAudio \

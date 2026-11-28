@@ -180,8 +180,10 @@ export FNAF4_AUDIO_BUFFER="$audio_buffer"
 if [[ "$edition" == standard || "$edition" == halloween ]]; then
     export FNAF4_ENABLE_CHEATS=1
     export FNAF4_CHEATS_STATE="$support_dir/cheats-state.plist"
+    export FNAF4_ENABLE_CONTROLLER=1
+    export FNAF4_CONTROLLER_PREFS="$support_dir/controller-mode"
 else
-    unset FNAF4_ENABLE_CHEATS FNAF4_CHEATS_STATE
+    unset FNAF4_ENABLE_CHEATS FNAF4_CHEATS_STATE FNAF4_ENABLE_CONTROLLER FNAF4_CONTROLLER_PREFS
 fi
 if [[ "$edition" == fnaf3 ]]; then
     export FNAF_DISPLAY_STRETCH_ONLY=1
