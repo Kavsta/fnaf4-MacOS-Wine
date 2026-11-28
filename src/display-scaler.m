@@ -286,7 +286,7 @@ static void updateScaledLayer(NSView *root, SEL selector)
 static NSString *const CheatStateErrorDomain = @"FNAF4CheatState";
 static NSArray<NSString *> *cheatSaveKeys(void)
 {
-    return @[@"beatgame", @"beat8"];
+    return @[@"beatgame", @"beat5", @"beat6", @"beat7", @"beat8"];
 }
 
 static NSError *cheatError(NSInteger code, NSString *message)
@@ -524,11 +524,58 @@ static BOOL setBeatAllNights(NSString *path, BOOL enable, NSError **error)
         return NO;
     }
     for (NSString *key in cheatSaveKeys()) {
-        if (!changeCheatLine(lines, key, original[key], NO, error)) return NO;
+        NSArray<NSString *> *originalLines = [original[key] isKindOfClass:NSArray.class] ? original[key] : nil;
+        // Older builds only changed beatgame and beat8. Preserve any other flags
+        // they did not track when disabling an already-active older cheat.
+        if (!originalLines) continue;
+        if (!changeCheatLine(lines, key, originalLines, NO, error)) return NO;
     }
     if (!writeSaveLines(lines, newline, path, error)) return NO;
     [states removeObjectForKey:path];
     return writeCheatStates(states, error);
+}
+
+static BOOL enforceBeatAllNights(NSString *path, NSError **error)
+{
+    NSMutableDictionary *states = readCheatStates(error);
+    if (!states) return NO;
+    NSDictionary *entry = [states[path] isKindOfClass:NSDictionary.class] ? states[path] : nil;
+    if (![entry[@"enabled"] boolValue]) return YES;
+
+    NSDictionary *savedOriginal = [entry[@"original"] isKindOfClass:NSDictionary.class] ? entry[@"original"] : nil;
+    if (!savedOriginal) {
+        if (error) *error = cheatError(3, @"The original save values are missing; refusing to change the save.");
+        return NO;
+    }
+    NSString *contents = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:error];
+    if (!contents) return NO;
+    NSString *newline = [contents containsString:@"\r\n"] ? @"\r\n"
+        : ([contents containsString:@"\r"] ? @"\r" : @"\n");
+    NSMutableArray<NSString *> *lines = [[contents componentsSeparatedByString:newline] mutableCopy];
+    NSDictionary *currentLines = originalCheatLines(lines);
+    if (!currentLines) {
+        if (error) *error = cheatError(2, @"The save file does not contain the expected [fn4] section.");
+        return NO;
+    }
+
+    NSMutableDictionary *original = [savedOriginal mutableCopy];
+    BOOL migrated = NO;
+    for (NSString *key in cheatSaveKeys()) {
+        if (!original[key]) {
+            // Older versions never touched these fields, so their current values
+            // are the correct values to restore when the toggle is switched off.
+            original[key] = currentLines[key] ?: @[];
+            migrated = YES;
+        }
+    }
+    if (migrated) {
+        states[path] = @{ @"enabled": @YES, @"original": original };
+        if (!writeCheatStates(states, error)) return NO;
+    }
+    for (NSString *key in cheatSaveKeys()) {
+        if (!changeCheatLine(lines, key, @[], YES, error)) return NO;
+    }
+    return writeSaveLines(lines, newline, path, error);
 }
 
 @implementation ScaleMenu
@@ -576,9 +623,13 @@ static BOOL setBeatAllNights(NSString *path, BOOL enable, NSError **error)
     BOOL enabled = [entry[@"enabled"] boolValue];
     self.beatAllNights.enabled = YES;
     self.beatAllNights.state = enabled ? NSControlStateValueOn : NSControlStateValueOff;
+    if (enabled && !enforceBeatAllNights(savePath, &error)) {
+        self.cheatNote.title = [NSString stringWithFormat:@"Could not apply all unlock flags: %@", error.localizedDescription];
+        return;
+    }
     self.cheatNote.title = enabled
-        ? @"Unlocks appear after returning to the title screen."
-        : @"Changes only the all-nights and 20/20 unlock flags.";
+        ? @"Quit and reopen FNAF 4 to load the unlocks."
+        : @"Changes only night/star flags; quit and reopen to apply.";
 }
 
 - (void)menuNeedsUpdate:(NSMenu *)menu
